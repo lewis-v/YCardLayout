@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/YCardLayout.iml" filepath="$PROJECT_DIR$/YCardLayout.iml" />
+      <module fileurl="file://$PROJECT_DIR$/ycardlayout_lib/ycardlayout_lib.iml" filepath="$PROJECT_DIR$/ycardlayout_lib/ycardlayout_lib.iml" />
+    </modules>
+  </component>
+</project>
