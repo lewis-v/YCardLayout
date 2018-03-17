@@ -30,7 +30,9 @@ public class YCardLayout extends FrameLayout {
     private float cacheX = -1;//上一次点击或移动的X
     private float cacheY = -1;//上一次点击或移动的Y
     private Point firstPoint = null;//原始位置
+    private Point reBackPoint = new Point(0,0);//复位的位置
     private int maxWidth = 0;//最大宽度，默认为屏幕宽度
+    private float moveRotation = 45;//移动时旋转最大的角度
     private OnYCardMoveListener onYCardMoveListener;
     private volatile boolean isRemove = false;//是否已被删除
     private volatile boolean moveAble = true;//是否可以移动
@@ -66,7 +68,7 @@ public class YCardLayout extends FrameLayout {
             @Override
             public void run() {
                 maxWidth = getWidth();
-                firstPoint = new Point(0,0);
+                firstPoint = new Point((int) getX(),(int)getY());
                 isInit = true;
             }
         });
@@ -83,6 +85,7 @@ public class YCardLayout extends FrameLayout {
         isRemove = false;
         moveAble = true;
         setRotation(0);
+        setAlpha(1);
     }
 
     @Override
@@ -121,30 +124,30 @@ public class YCardLayout extends FrameLayout {
         if (!isRemove && moveAble && isInit && !isRunAnim) {
             switch (event.getAction()) {
                 case MotionEvent.ACTION_DOWN:
-                    Log.e(TAG, "down:"+event.getRawX()+";"+event.getRawY());
+                    //获取点击时的数据,并存起来
                     cacheX = event.getRawX();
                     cacheY = event.getRawY();
                     downX = event.getRawX();
                     downY = event.getRawY();
-                    if (firstPoint == null) {
+                    if (firstPoint == null) {//这个正常情况不会执行,在这里只是以防万一
                         firstPoint = new Point((int) getX(), (int) getY());
                     }
                     return true;
                 case MotionEvent.ACTION_MOVE:
-                    if ((Math.abs(downX-event.getRawX()) > minLength || Math.abs(downY-event.getRawY()) > minLength)) {
+                    if ((Math.abs(downX-event.getRawX()) > minLength || Math.abs(downY-event.getRawY()) > minLength)) {//只有大于最小滑动距离才算移动了
                         float moveX = event.getRawX();
                         float moveY = event.getRawY();
 
                         if (moveY > 0) {
-                            setY(getY() + (moveY - cacheY));
+                            setY(getY() + (moveY - cacheY));//移动Y轴
                         }
                         if (moveX > 0) {
-                            setX(getX() + (moveX - cacheX));
+                            setX(getX() + (moveX - cacheX));//移动X轴
                             float moveLen = (moveX - downX) / maxWidth;
-                            int moveProgress = (int) ((moveLen) * 100);
-                            setRotation((moveLen) * 45f);
+                            int moveProgress = (int) ((moveLen) * 100);//移动的距离占整个控件的比例moveProgress%
+                            setRotation((moveLen) * moveRotation);//控制控件的旋转
                             if (onYCardMoveListener != null) {
-                                onYCardMoveListener.onMove(this, moveProgress);
+                                onYCardMoveListener.onMove(this, moveProgress);//触发移动的监听器
                             }
                         }
                         cacheX = moveX;
@@ -152,14 +155,14 @@ public class YCardLayout extends FrameLayout {
                     }
                     return false;
                 case MotionEvent.ACTION_UP:
-                    if ((Math.abs(downX-event.getRawX()) > minLength || Math.abs(downY-event.getRawY()) > minLength)) {
+                    if ((Math.abs(downX-event.getRawX()) > minLength || Math.abs(downY-event.getRawY()) > minLength)) {//移动了才截获这个事件
                         int moveEndProgress = (int) (((event.getRawX() - downX) / maxWidth) * 100);
                         if (onYCardMoveListener != null) {
-                            if (onYCardMoveListener.onMoveEnd(this, moveEndProgress)) {
+                            if (onYCardMoveListener.onMoveEnd(this, moveEndProgress)) {//移动结束事件
                                 return true;
                             }
                         }
-                        animToReBack(this, firstPoint);
+                        animToReBack(this, reBackPoint);//复位
                         return true;
                     }
                     break;
@@ -174,24 +177,24 @@ public class YCardLayout extends FrameLayout {
      * @param point
      * @param rotation
      */
-    public AnimatorSet getAnimToMove(View view, Point point, float rotation){
+    public AnimatorSet getAnimToMove(View view, Point point, float rotation,float alpha){
         ObjectAnimator objectAnimatorX = ObjectAnimator.ofFloat(view,"translationX",point.x);
         ObjectAnimator objectAnimatorY = ObjectAnimator.ofFloat(view,"translationY",point.y);
         ObjectAnimator objectAnimatorR = ObjectAnimator.ofFloat(view,"rotation",rotation);
+        ObjectAnimator objectAnimatorA = ObjectAnimator.ofFloat(view,"alpha",alpha);
         AnimatorSet animatorSet = new AnimatorSet();
-        animatorSet.playTogether(objectAnimatorR,objectAnimatorX,objectAnimatorY);
+        animatorSet.playTogether(objectAnimatorR,objectAnimatorX,objectAnimatorY,objectAnimatorA);
         return animatorSet;
     }
 
     /**
-     * 还原动画
+     * 复位动画
      * @param view
-     * @param point
+     * @param point 复位的位置
      */
     public void animToReBack(View view,Point point){
-        Log.e(TAG,"原："+view.getX()+view.getY()+"back:"+point.toString());
-        AnimatorSet animatorSet = getAnimToMove(view,point,0);
-        isRunAnim = true;
+        AnimatorSet animatorSet = getAnimToMove(view,point,0,getAlpha());//获取动画
+        isRunAnim = true;//动画正在运行的标记
         animatorSet.addListener(new Animator.AnimatorListener() {
             @Override
             public void onAnimationStart(Animator animation) {
@@ -213,7 +216,7 @@ public class YCardLayout extends FrameLayout {
 
             }
         });
-        animatorSet.start();
+        animatorSet.start();//开始复位动画
     }
 
 
@@ -240,8 +243,8 @@ public class YCardLayout extends FrameLayout {
      */
     public void remove(boolean isLeft, final RemoveAnimListener removeAnimListener){
         isRemove = true;
-        final Point point = calculateEndPoint(this,this.firstPoint,isLeft);
-        AnimatorSet animatorSet = getReMoveAnim(this,point);
+        final Point point = calculateEndPoint(this,this.firstPoint,isLeft);//计算终点坐标
+        AnimatorSet animatorSet = getReMoveAnim(this,point,getRemoveRotation(this,this.firstPoint,isLeft));//获取移除动画
         animatorSet.addListener(new Animator.AnimatorListener() {
             @Override
             public void onAnimationStart(Animator animation) {
@@ -288,7 +291,7 @@ public class YCardLayout extends FrameLayout {
         }else {
             endPoint.x = point.x + (int) (view.getWidth() * 1.5);
         }
-        if (((int)view.getX()) == point.x && ((int)view.getY()) == point.y){//还在原来位置
+        if (Math.abs(view.getX() - point.x) < minLength &&Math.abs (view.getY()-point.y) < minLength){//还在原来位置
             endPoint.y = point.y + (int)(view.getHeight()*1.5);
         }else {
             int endY = getEndY(view,point);
@@ -312,13 +315,32 @@ public class YCardLayout extends FrameLayout {
     }
 
     /**
+     * 获取移除的动画角度
+     * @param view
+     * @param point
+     * @param isLeft
+     * @return
+     */
+    public float getRemoveRotation(View view, Point point, boolean isLeft){
+        if (Math.abs(view.getX() - point.x) < minLength &&Math.abs (view.getY()-point.y) < minLength){//还在原来位置
+            if (isLeft){
+                return -moveRotation/2;
+            }else {
+                return moveRotation/2;
+            }
+        }else {
+            return view.getRotation();
+        }
+    }
+
+    /**
      * 获取移除动画
      * @param view
      * @param point
      * @return
      */
-    public AnimatorSet getReMoveAnim(View view, Point point){
-        AnimatorSet animatorSet = getAnimToMove(view,point,view.getRotation());
+    public AnimatorSet getReMoveAnim(View view, Point point,float rotation){
+        AnimatorSet animatorSet = getAnimToMove(view,point,rotation,0);
         animatorSet.setDuration(500);
         return animatorSet;
     }
@@ -340,6 +362,26 @@ public class YCardLayout extends FrameLayout {
 
     public YCardLayout setMoveAble(boolean moveAble) {
         this.moveAble = moveAble;
+        return this;
+    }
+
+    public YCardLayout setMaxWidth(int maxWidth) {
+        this.maxWidth = maxWidth;
+        return this;
+    }
+
+    public YCardLayout setReBackPoint(Point reBackPoint) {
+        this.reBackPoint = reBackPoint;
+        return this;
+    }
+
+    public YCardLayout setMoveRotation(float moveRotation) {
+        this.moveRotation = moveRotation;
+        return this;
+    }
+
+    public YCardLayout setFirstPoint(Point firstPoint) {
+        this.firstPoint = firstPoint;
         return this;
     }
 }
